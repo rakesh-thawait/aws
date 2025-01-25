@@ -1,0 +1,129 @@
+#Give me a simple aws cloud formation template for EKS cluster which includes kubernetes version, one worker node, and cni plug-in. Create an EC2 and assign an appropriate IAM role to it so that it can access the EKS cluster. Add the code to update the aws-auth configmap to include EC2 IAM role after AWS EKS cluster has been created. 
+
+
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    Description: EC2 instance type for the EKS access instance
+  SubnetId:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnet ID for the EKS access instance
+  SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Security group IDs for the EKS access instance
+  EKSClusterName:
+    Type: String
+    Description: Name of the EKS cluster
+  ScalingConfigMin:
+    Type: String
+    Default: 1
+    Description: scaling configuration - mininum instance    
+  ScalingConfigMax:
+    Type: String
+    Default: 1
+    Description: scaling configuration - maximum instance 
+  ScalingConfigDesired:
+    Type: String
+    Default: 1
+    Description: scaling configuration - desired instance
+  KubernetesVersion:
+    Type: String
+    Default: "1.29"
+    Description: Kubernetes version 
+
+Resources:
+  # IAM Role for the EKS Cluster
+  EKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+
+  # IAM Role for the Worker Nodes
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+
+  # EKS Cluster
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref EKSClusterName
+      RoleArn: !GetAtt EKSClusterRole.Arn
+      KubernetesNetworkConfig:
+        ServiceIpv4Cidr: 172.20.0.0/16
+      ResourcesVpcConfig:
+        SubnetIds: !Ref SubnetId
+        SecurityGroupIds: !Ref SecurityGroupIds
+      Version: !Ref KubernetesVersion
+
+  # EKS Managed Node Group
+  EKSNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref EKSCluster
+      NodeRole: !GetAtt NodeInstanceRole.Arn
+      Subnets: !Ref SubnetId
+      ScalingConfig:
+        MinSize: !Ref ScalingConfigMin
+        MaxSize: !Ref ScalingConfigMax
+        DesiredSize: !Ref ScalingConfigDesired
+      AmiType: AL2_x86_64
+      InstanceTypes:
+        - !Ref InstanceType
+
+  # CNI Plugin Addon
+  CNIAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EKSCluster
+      AddonName: vpc-cni
+      AddonVersion: v1.19.0-eksbuild.1
+
+  # IAM Role for EC2 Instance
+  EC2AccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+Outputs:
+  ClusterName:
+    Description: EKS Cluster Name
+    Value: !Ref EKSCluster

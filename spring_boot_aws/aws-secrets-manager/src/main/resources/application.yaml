@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: aws-secrets-manager
+  cloud:
+    aws:
+      endpoint: http://localhost:4566
+      region.static: ap-south-1
+      credentials:
+        access-key: noop
+        secret-key: noop
+
+  config:
+    import: aws-secretsmanager:/secret/aws-secrets-manager
+  app:
+    lastName: ${lastName}

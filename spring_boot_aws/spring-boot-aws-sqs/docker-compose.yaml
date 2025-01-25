@@ -1,0 +1,13 @@
+services:
+  sqs-localstack:
+    image: localstack/localstack
+    container_name: localstack-sqs
+    environment:
+      SERVICES: sqs
+      AWS_ACCESS_KEY_ID: noop
+      AWS_SECRET_ACCESS_KEY: noop
+      AWS_DEFAULT_REGION: ap-south-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./localstack-script:/etc/localstack/init/ready.d

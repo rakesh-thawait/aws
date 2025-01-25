@@ -1,0 +1,97 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.medium
+    Description: EC2 instance type for the EKS access instance
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet ID for the EKS access instance
+  SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Security group IDs for the EKS access instance
+  ImageId:
+    Type: String
+    Default: ami-0614680123427b75e
+    Description: image id    
+
+Resources:
+  EKSAccessEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds: !Ref SecurityGroupIds
+      ImageId: !Ref ImageId
+      Tags:
+        - Key: Name
+          Value: KubeEdgeNodeInstance
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum update -y
+          yum install -y amazon-efs-utils
+          yum install -y jq
+          yum install -y awscli
+          wget https://github.com/kubeedge/kubeedge/releases/download/v1.18.0/keadm-v1.18.0-linux-amd64.tar.gz
+          tar -zxvf keadm-v1.18.0-linux-amd64.tar.gz
+          cp keadm-v1.18.0-linux-amd64/keadm/keadm /usr/local/bin/keadm
+          wget https://github.com/containerd/containerd/releases/download/v1.7.11/containerd-1.7.11-linux-amd64.tar.gz
+          sudo tar Cxzvf /usr/local containerd-1.7.11-linux-amd64.tar.gz
+          wget https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
+          chmod +x containerd.service
+          sudo mkdir -p /usr/local/lib/systemd/system
+          sudo cp -p containerd.service /usr/local/lib/systemd/system/          
+          wget https://github.com/opencontainers/runc/releases/download/v1.1.14/runc.amd64
+          sudo install -m 755 runc.amd64 /usr/local/sbin/runc
+          wget https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-arm64-v1.1.1.tgz 
+          sudo mkdir -p /opt/cni/bin
+          sudo tar Cxzvf /opt/cni/bin cni-plugins-linux-arm64-v1.1.1.tgz
+          mkdir -p /etc/cni/net.d/
+          cat >/etc/cni/net.d/10-containerd-net.conflist <<EOF
+          {
+            "cniVersion": "1.0.0",
+            "name": "containerd-net",
+            "plugins": [
+              {
+                "type": "bridge",
+                "bridge": "cni0",
+                "isGateway": true,
+                "ipMasq": true,
+                "promiscMode": true,
+                "ipam": {
+                  "type": "host-local",
+                  "ranges": [
+                    [{
+                      "subnet": "10.0.0.0/16"
+                    }],
+                    [{
+                      "subnet": "2001:db8:4860::/64"
+                    }]
+                  ],
+                  "routes": [
+                    { "dst": "0.0.0.0/0" },
+                    { "dst": "::/0" }
+                  ]
+                }
+              },
+              {
+                "type": "portmap",
+                "capabilities": {"portMappings": true}
+              }
+            ]
+          }
+          EOF
+          sudo mkdir -p /etc/containerd/
+          containerd config default > /etc/containerd/config.toml
+          systemctl restart containerd
+
+Outputs:
+  EC2InstancePublicIP:
+    Description: Public IP of the EC2 instance for EKS access
+    Value: !GetAtt EKSAccessEC2.PublicIp

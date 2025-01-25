@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: MSK cluster with SASL/SCRAM authentication, Secrets Manager credentials and custom configuration.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: kafka.t3.small
+    Description: EC2 instance type for the EKS access instance
+  SubnetId:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnet ID for the EKS access instance
+  SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Security group IDs for the EKS access instance
+  KafkaClusterName:
+    Type: String
+    Default: KafkaClusterWithSaslScram
+    Description: Kafka cluster name 
+  KafkaClusterVersion:
+    Type: String
+    Default: 3.6.0
+    Description: Kafka cluster version
+  NumberOfBroker:
+    Type: String
+    Default: 2
+    Description: Number of broker needed in the Kafka cluster version    
+
+Resources:
+  KafkaScramSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: KafkaScramCredentials
+      Description: Credentials for SASL/SCRAM authentication.
+      SecretString: !Sub |
+        {
+          "username": "kafka_user",
+          "password": "YourStrongPassword123!"
+        }
+
+  MSKCluster:
+    Type: AWS::MSK::Cluster
+    Properties:
+      ClusterName: !Ref KafkaClusterName
+      KafkaVersion: !Ref KafkaClusterVersion
+      NumberOfBrokerNodes: !Ref NumberOfBroker
+      BrokerNodeGroupInfo:
+        InstanceType: !Ref InstanceType
+        ClientSubnets: !Ref SubnetId
+        SecurityGroups: !Ref SecurityGroupIds
+      EncryptionInfo:
+        EncryptionAtRest:
+          DataVolumeKMSKeyId: alias/aws/kafka
+        EncryptionInTransit:
+          ClientBroker: TLS
+      ClientAuthentication:
+        Sasl:
+          Scram:
+            Enabled: true
+      ConfigurationInfo:
+        Arn: !Ref MSKConfiguration
+        Revision: 1
+      Tags:
+        Environment: Production
+
+  MSKConfiguration:
+    Type: AWS::MSK::Configuration
+    Properties:
+      Name: KafkaConfiguration
+      Description: Custom configuration for the MSK cluster.
+      ServerProperties: |
+        delete.topic.enable=true
+        offsets.topic.replication.factor=3
+        transaction.state.log.replication.factor=3
+        transaction.state.log.min.isr=2
+
+  SecretPolicy:
+    Type: AWS::SecretsManager::ResourcePolicy
+    Properties:
+      SecretId: !Ref KafkaScramSecret
+      ResourcePolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: kafka.amazonaws.com
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref KafkaScramSecret
+
+Outputs:
+  MSKClusterArn:
+    Description: The ARN of the MSK Cluster.
+    Value: !Ref MSKCluster
+
+  KafkaScramSecretName:
+    Description: The name of the Secrets Manager secret for SASL/SCRAM credentials.
+    Value: !Ref KafkaScramSecret
