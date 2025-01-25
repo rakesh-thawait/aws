@@ -1,6 +1,3 @@
-#Give me a simple aws cloud formation template for EKS cluster which includes kubernetes version, one worker node, and cni plug-in. Create an EC2 and assign an appropriate IAM role to it so that it can access the EKS cluster. Add the code to update the aws-auth configmap to include EC2 IAM role after AWS EKS cluster has been created. 
-
-
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
