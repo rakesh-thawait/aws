@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: spring-boot-aws-ses
+  cloud:
+    aws:
+      endpoint: http://localhost:4566
+      region.static: ap-south-1
+      credentials:
+        access-key: noop
+        secret-key: noop
+
+

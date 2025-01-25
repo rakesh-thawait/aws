@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AWS CloudFormation template to create an Amazon RDS instance"
+
+Parameters:
+  DBInstanceIdentifier:
+    Type: String
+    Default: "MyRDSInstance"
+    Description: "The database instance identifier."
+
+  DBName:
+    Type: String
+    Default: "mydatabase"
+    Description: "The name of the database."
+
+  DBUser:
+    Type: String
+    Default: "admin"
+    Description: "The database master username."
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+
+  DBPassword:
+    Type: String
+    Description: "The database master password."
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 41
+    AllowedPattern: "[a-zA-Z0-9]*"
+
+  DBInstanceClass:
+    Type: String
+    Default: "db.t3.micro"
+    Description: "The database instance type."
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+      - db.m5.large
+
+  AllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: "The allocated storage size (in GB)."
+    MinValue: 20
+    MaxValue: 65536
+
+  SubnetGroup:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: "The DB subnet group name."
+
+  SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: "The security group IDs for the RDS instance."
+
+Resources:
+  MyDBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: "Subnet group for RDS instance"
+      SubnetIds: !Ref SubnetGroup
+
+  MyDBInstance:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      DBInstanceIdentifier: !Ref DBInstanceIdentifier
+      AllocatedStorage: !Ref AllocatedStorage
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: "mysql"
+      MasterUsername: !Ref DBUser
+      MasterUserPassword: !Ref DBPassword
+      DBName: !Ref DBName
+      BackupRetentionPeriod: 7
+      PubliclyAccessible: true
+      MultiAZ: false
+      VPCSecurityGroups: !Ref SecurityGroupIds
+      DBSubnetGroupName: !Ref MyDBSubnetGroup
+      StorageType: "gp2"
+
+Outputs:
+  RDSInstanceEndpoint:
+    Description: "The connection endpoint for the RDS instance."
+    Value: !GetAtt MyDBInstance.Endpoint.Address
